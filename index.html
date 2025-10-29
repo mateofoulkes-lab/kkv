@@ -148,9 +148,6 @@ if (screen.orientation && screen.orientation.lock) {
   const exportBtn = $("#exportAnim");
   const log = $("#log");
 
-  const snapCanvas = document.createElement("canvas");
-  const snapCtx = snapCanvas.getContext("2d", { alpha: false });
-
   dlBtn.disabled = true;
   shareBtn.disabled = true;
 
@@ -338,38 +335,8 @@ if (screen.orientation && screen.orientation.lock) {
   }
   voiceBtn.onclick = toggleVoice;
 
-  function syncSnapshotSize() {
-    snapCanvas.width = canvas.width;
-    snapCanvas.height = canvas.height;
-  }
-
   async function takeSnapshot() {
-    if (!snapCanvas.width || !snapCanvas.height) {
-      syncSnapshotSize();
-    }
-
-    snapCtx.fillStyle = "#000";
-    snapCtx.fillRect(0, 0, snapCanvas.width, snapCanvas.height);
-
-    if (cam.videoWidth && cam.videoHeight) {
-      const scale = Math.min(snapCanvas.width / cam.videoWidth, snapCanvas.height / cam.videoHeight);
-      const drawW = cam.videoWidth * scale;
-      const drawH = cam.videoHeight * scale;
-      const offsetX = (snapCanvas.width - drawW) / 2;
-      const offsetY = (snapCanvas.height - drawH) / 2;
-
-      snapCtx.save();
-      if (invertCam) {
-        snapCtx.translate(offsetX + drawW, offsetY);
-        snapCtx.scale(-1, 1);
-        snapCtx.drawImage(cam, 0, 0, drawW, drawH);
-      } else {
-        snapCtx.drawImage(cam, offsetX, offsetY, drawW, drawH);
-      }
-      snapCtx.restore();
-    }
-
-    snapCanvas.toBlob(b => {
+    canvas.toBlob(b => {
       if (b) {
         snapshots.push(b);
         updateShotsCount();
