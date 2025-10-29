@@ -6,28 +6,283 @@
 <link rel="manifest" href="manifest.webmanifest">
 <title>Onion Skin Video</title>
 <style>
-  :root { color-scheme: dark; }
-  body { margin:0; font-family: system-ui, Arial, sans-serif; background:#0b0b0b; color:#eee; }
-  #stage { display:grid; place-items:center; min-height:100svh; padding-bottom:128px; }
-  canvas { max-width:100vw; max-height:calc(100svh - 128px); background:#000; }
-  #ui { position:fixed; left:0; right:0; bottom:0; display:flex; gap:.6rem; flex-wrap:wrap;
-        align-items:center; padding:.6rem; background:#000a; backdrop-filter: blur(6px); }
-  button, select, input[type="file"] { background:#1e1e1e; color:#eee; border:1px solid #333; border-radius:10px; padding:.6rem .8rem; }
-  button:disabled{opacity:.5}
-  .grow { flex:1 }
-  label { display:flex; align-items:center; gap:.4rem; }
-  .pill { padding:.2rem .6rem; border-radius:100px; background:#153; border:1px solid #294; font-size:.85rem; }
-  .danger { background:#521; border-color:#743; }
-  .ok { background:#153; border-color:#294; }
-  .info { background:#123; border-color:#345; }
-  #log { position:fixed; top:3.2rem; left:.5rem; right:.5rem; text-wrap:balance; opacity:.95; display:flex; gap:.5rem; align-items:center; justify-content:center; }
-  #banner { position:fixed; top:.5rem; left:.5rem; right:.5rem; display:none; gap:.5rem; align-items:center; justify-content:space-between; background:#123; border:1px solid #345; padding:.5rem .75rem; border-radius:12px; }
-  #banner .msg{ font-size:.95rem; }
-  #versionTag { position:fixed; top:.5rem; right:.5rem; font-size:.8rem; letter-spacing:.08em; background:#000c; border:1px solid #333; border-radius:999px; padding:.2rem .6rem; color:#bbb; text-transform:uppercase; pointer-events:none; }
+  :root {
+    color-scheme: dark;
+    --bg: radial-gradient(circle at top, #1b1d2a 0%, #090b12 55%, #05060a 100%);
+    --panel-bg: rgba(18, 21, 33, 0.85);
+    --panel-border: rgba(114, 149, 255, 0.22);
+    --button-bg: linear-gradient(135deg, #20263b, #131828);
+    --button-hover: linear-gradient(135deg, #2d3551, #181d2f);
+    --button-border: rgba(122, 155, 255, 0.25);
+    --accent: #67d6ff;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    min-height: 100svh;
+    font-family: "SF Pro Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: #eef2ff;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+  }
+  a { color: inherit; }
+  #stage {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(2rem, 7vh, 4rem) 1.5rem calc(14rem + env(safe-area-inset-bottom));
+  }
+  #viewer {
+    position: relative;
+    display: grid;
+    place-items: center;
+    padding: clamp(0.8rem, 2vw, 1.6rem);
+    background: rgba(5, 6, 12, 0.85);
+    border-radius: clamp(18px, 3vw, 28px);
+    border: 1px solid rgba(120, 140, 255, 0.25);
+    box-shadow: 0 25px 65px -30px rgba(0, 0, 0, 0.9);
+    max-width: min(92vw, 1100px);
+    width: 100%;
+  }
+  canvas {
+    width: 100%;
+    height: auto;
+    max-height: calc(100svh - 220px);
+    border-radius: clamp(14px, 2vw, 24px);
+    background: #000;
+  }
+  .frameNav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: clamp(3rem, 6vw, 3.75rem);
+    height: clamp(3rem, 6vw, 3.75rem);
+    border-radius: 999px;
+    border: 1px solid var(--button-border);
+    background: var(--button-bg);
+    backdrop-filter: blur(8px);
+    display: grid;
+    place-items: center;
+    font-size: clamp(1.45rem, 3vw, 1.9rem);
+    color: #f7fbff;
+    box-shadow: 0 15px 35px -20px rgba(10, 10, 18, 0.9);
+    cursor: pointer;
+    transition: transform 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+  }
+  .frameNav:hover:not(:disabled) {
+    background: var(--button-hover);
+    transform: translateY(-50%) scale(1.05);
+  }
+  .frameNav:active:not(:disabled) {
+    transform: translateY(-50%) scale(0.96);
+  }
+  .frameNav:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  #back.frameNav { left: clamp(0.6rem, 2vw, 1.4rem); }
+  #fwd.frameNav { right: clamp(0.6rem, 2vw, 1.4rem); }
+
+  #versionTag {
+    position: fixed;
+    top: 0.85rem;
+    right: 1rem;
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(130, 130, 155, 0.5);
+    border-radius: 999px;
+    padding: 0.25rem 0.7rem;
+    color: #aeb6d8;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+
+  #banner {
+    position: fixed;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(16, 22, 40, 0.92);
+    border: 1px solid rgba(123, 156, 255, 0.35);
+    padding: 0.75rem 1.1rem;
+    border-radius: 16px;
+    width: min(480px, calc(100vw - 2rem));
+    box-shadow: 0 18px 45px -28px rgba(0, 0, 0, 0.8);
+  }
+  #banner .msg { font-size: 0.95rem; }
+
+  #log {
+    position: fixed;
+    top: calc(3.4rem + env(safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(480px, calc(100vw - 2rem));
+    text-wrap: balance;
+    opacity: 0.95;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #ui {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(1.5rem + env(safe-area-inset-bottom));
+    width: min(980px, calc(100vw - 2rem));
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 26px;
+    padding: 1.15rem;
+    box-shadow: 0 25px 55px -32px rgba(5, 6, 12, 0.85);
+    backdrop-filter: blur(22px);
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+  #ui .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    align-items: center;
+    justify-content: center;
+  }
+  button, select, .fileInput span, input[type="range"], #ui .pill {
+    font-family: inherit;
+    font-size: 0.95rem;
+  }
+  button, select {
+    background: var(--button-bg);
+    color: #ecf3ff;
+    border: 1px solid var(--button-border);
+    border-radius: 16px;
+    padding: 0.6rem 1rem;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    min-width: fit-content;
+  }
+  button:hover:not(:disabled), select:hover {
+    background: var(--button-hover);
+  }
+  button:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  select {
+    appearance: none;
+    padding-right: 2.2rem;
+    background-image: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0));
+  }
+  .pill {
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    background: rgba(103, 214, 255, 0.15);
+    border: 1px solid rgba(103, 214, 255, 0.35);
+    font-size: 0.85rem;
+  }
+  .danger { background: rgba(255, 108, 108, 0.18); border-color: rgba(255, 108, 108, 0.45); }
+  .ok { background: rgba(103, 214, 255, 0.18); border-color: rgba(103, 214, 255, 0.45); }
+  .info { background: rgba(130, 170, 255, 0.15); border-color: rgba(130, 170, 255, 0.45); }
+
+  .grow {
+    flex: 1 1 260px;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.55rem 0.75rem;
+    border-radius: 18px;
+    background: rgba(14, 16, 26, 0.6);
+    border: 1px solid rgba(120, 140, 255, 0.2);
+  }
+  .grow input[type="range"] {
+    width: 160px;
+    max-width: 100%;
+    accent-color: var(--accent);
+  }
+  label.toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.55rem 0.85rem;
+    border-radius: 16px;
+    background: rgba(14, 16, 26, 0.6);
+    border: 1px solid rgba(120, 140, 255, 0.2);
+  }
+  label.toggle input { accent-color: var(--accent); }
+  .fileInput {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1.2rem;
+    border-radius: 16px;
+    border: 1px solid var(--button-border);
+    background: var(--button-bg);
+    cursor: pointer;
+    overflow: hidden;
+  }
+  .fileInput span { pointer-events: none; font-weight: 600; letter-spacing: 0.02em; }
+  .fileInput input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  @media (max-width: 820px) {
+    #ui {
+      width: min(100vw - 1rem, 720px);
+      padding: 1rem;
+      border-radius: 22px;
+    }
+    #stage {
+      padding-bottom: calc(16rem + env(safe-area-inset-bottom));
+    }
+  }
+  @media (max-width: 600px) {
+    #viewer {
+      padding: 0.7rem;
+    }
+    .frameNav {
+      width: 2.85rem;
+      height: 2.85rem;
+      font-size: 1.4rem;
+    }
+    #back.frameNav { left: 0.4rem; }
+    #fwd.frameNav { right: 0.4rem; }
+    #ui .row {
+      justify-content: flex-start;
+    }
+    #ui {
+      bottom: calc(0.8rem + env(safe-area-inset-bottom));
+      width: min(100vw - 0.8rem, 560px);
+    }
+    .grow {
+      flex-basis: 100%;
+    }
+  }
 </style>
 
 <div id="stage">
-  <canvas id="canvas"></canvas>
+  <div id="viewer">
+    <canvas id="canvas"></canvas>
+    <button id="back" class="frameNav" aria-label="Cuadro anterior" disabled>❮</button>
+    <button id="fwd" class="frameNav" aria-label="Cuadro siguiente" disabled>❯</button>
+  </div>
 </div>
 
 <div id="versionTag"></div>
@@ -43,35 +298,41 @@
 <div id="log"></div>
 
 <div id="ui">
-  <input type="file" id="file" accept="video/*" />
-  <button id="play">▶️ reproducir</button>
-  <button id="pause">⏸️ pausar</button>
-  <button id="back">⟵ cuadro atrás</button>
-  <button id="fwd">cuadro adelante ⟶</button>
-  <label class="grow">Opacidad cámara
-    <input id="alpha" type="range" min="0" max="1" step="0.05" value="0.5">
-    <span id="alphaV" class="pill">50%</span>
-  </label>
-  <label>Invertir cámara
-    <input id="flipCam" type="checkbox" checked>
-  </label>
-  <button id="camToggle">🔄 cámara: frontal</button>
-  <button id="voice">🎤 voz: off</button>
-  <button id="download">⬇️ descargar MP4/WebM</button>
-  <button id="share">📤 compartir</button>
-  <button id="clearShots">🧻 borrar fotos</button>
-  <select id="fpsSel" title="FPS de exportación">
-    <option value="auto" selected>FPS: auto (origen)</option>
-    <option value="12">FPS: 12</option>
-    <option value="15">FPS: 15</option>
-    <option value="24">FPS: 24</option>
-    <option value="25">FPS: 25</option>
-    <option value="30">FPS: 30</option>
-    <option value="60">FPS: 60</option>
-  </select>
-  <button id="exportAnim" class="info">🎬 exportar animación</button>
-  <span id="shotsCount" class="pill">0 fotos</span>
-  <button id="install" style="display:none;">⬇️ Instalar app</button>
+  <div class="row">
+    <label class="fileInput" for="file">
+      <input type="file" id="file" accept="video/*" />
+      <span>📁 Abrir video</span>
+    </label>
+    <button id="play">▶️ reproducir</button>
+    <button id="pause">⏸️ pausar</button>
+    <button id="camToggle">🔄 cámara: frontal</button>
+    <button id="voice">🎤 voz: off</button>
+    <span id="shotsCount" class="pill">0 fotos</span>
+  </div>
+  <div class="row">
+    <label class="grow">Opacidad cámara
+      <input id="alpha" type="range" min="0" max="1" step="0.05" value="0.5">
+      <span id="alphaV" class="pill">50%</span>
+    </label>
+    <label class="toggle">
+      <input id="flipCam" type="checkbox" checked>
+      <span>Invertir cámara</span>
+    </label>
+    <select id="fpsSel" title="FPS de exportación">
+      <option value="auto" selected>FPS: auto (origen)</option>
+      <option value="12">FPS: 12</option>
+      <option value="15">FPS: 15</option>
+      <option value="24">FPS: 24</option>
+      <option value="25">FPS: 25</option>
+      <option value="30">FPS: 30</option>
+      <option value="60">FPS: 60</option>
+    </select>
+    <button id="exportAnim" class="info">🎬 exportar animación</button>
+    <button id="download">⬇️ descargar MP4/WebM</button>
+    <button id="share">📤 compartir</button>
+    <button id="clearShots">🧻 borrar fotos</button>
+    <button id="install" style="display:none;">⬇️ Instalar app</button>
+  </div>
 </div>
 
 <script>
@@ -117,33 +378,32 @@ if ('serviceWorker' in navigator) {
       dismissBtn.onclick = () => banner.style.display = 'none';
     });
   });
+
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (installBtn) installBtn.style.display = 'inline-flex';
+  });
+
+  if (installBtn) {
+    installBtn.onclick = async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') installBtn.style.display = 'none';
+      deferredPrompt = null;
+    };
+  }
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    hasController = true;
+  });
 }
 
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredPrompt = e;
-  installBtn.style.display = 'inline-block';
-});
-
-installBtn.addEventListener('click', async () => {
-  if (!deferredPrompt) return;
-  deferredPrompt.prompt();
-  const { outcome } = await deferredPrompt.userChoice;
-  deferredPrompt = null;
-  installBtn.style.display = 'none';
-});
-
-// Try to lock orientation to portrait (best effort)
-if (screen.orientation && screen.orientation.lock) {
-  screen.orientation.lock('portrait').catch(()=>{});
-}
-</script>
-
-<script>
-(async () => {
+(function() {
   const $ = sel => document.querySelector(sel);
   const canvas = $("#canvas");
-  const ctx = canvas.getContext("2d", { alpha:false });
+  const ctx = canvas.getContext("2d");
   const file = $("#file");
   const playBtn = $("#play"), pauseBtn = $("#pause");
   const back = $("#back"), fwd = $("#fwd");
@@ -193,6 +453,7 @@ if (screen.orientation && screen.orientation.lock) {
   let rafId = 0;
   let invertCam = true;
   let exporting = false;
+  let resizeHandler = null;
 
   function toast(msg, kind="ok") {
     log.innerHTML = `<span class="pill ${kind}">${msg}</span>`;
@@ -213,6 +474,9 @@ if (screen.orientation && screen.orientation.lock) {
   }
   await startCamera();
 
+  back.disabled = true;
+  fwd.disabled = true;
+
   file.addEventListener("change", async () => {
     const f = file.files?.[0]; if (!f) return;
     outBlob = null;
@@ -220,13 +484,25 @@ if (screen.orientation && screen.orientation.lock) {
     shareBtn.disabled = true;
     snapshots.length = 0;
     updateShotsCount();
+
+    if (resizeHandler) {
+      removeEventListener("resize", resizeHandler);
+      resizeHandler = null;
+    }
+
     vid.src = URL.createObjectURL(f);
-    await vid.play().catch(()=>vid.pause());
+    const ready = new Promise(resolve => {
+      if (vid.readyState >= 2) resolve();
+      else vid.addEventListener("loadeddata", resolve, { once: true });
+    });
+    try { await ready; } catch {}
+    try { vid.pause(); } catch {}
+    try { vid.currentTime = 0; } catch {}
 
     const fit = () => {
       const w = vid.videoWidth, h = vid.videoHeight;
       if (!w || !h) return;
-      const scale = Math.min(innerWidth / w, (innerHeight-140) / h);
+      const scale = Math.min(innerWidth / w, (innerHeight-180) / h);
       canvas.width = Math.round(w * scale);
       canvas.height = Math.round(h * scale);
     };
@@ -235,7 +511,8 @@ if (screen.orientation && screen.orientation.lock) {
       syncSnapshotSize();
     };
     applyFit();
-    addEventListener("resize", applyFit);
+    resizeHandler = applyFit;
+    addEventListener("resize", resizeHandler);
 
     try {
       videoCaptureStream?.getTracks?.().forEach(t => t.stop());
@@ -268,6 +545,9 @@ if (screen.orientation && screen.orientation.lock) {
       fpsEstimate = 30;
     }
 
+    back.disabled = false;
+    fwd.disabled = false;
+
     if (!framesRequested) { framesRequested = true; rafId = requestAnimationFrame(render); }
   });
 
@@ -275,28 +555,41 @@ if (screen.orientation && screen.orientation.lock) {
     if (exporting) return;
     if (vid.videoWidth) {
       ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
-      ctx.globalAlpha = parseFloat(alpha.value || "0.5");
-      if (cam.videoWidth && cam.videoHeight) {
-        const scale = Math.min(canvas.width / cam.videoWidth, canvas.height / cam.videoHeight);
-        const drawW = cam.videoWidth * scale;
-        const drawH = cam.videoHeight * scale;
-        const offsetX = (canvas.width - drawW) / 2;
-        const offsetY = (canvas.height - drawH) / 2;
-        ctx.fillStyle = "#000";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.save();
-        if (invertCam) {
-          ctx.translate(offsetX + drawW, offsetY);
-          ctx.scale(-1, 1);
-          ctx.drawImage(cam, 0, 0, drawW, drawH);
-        } else {
-          ctx.drawImage(cam, offsetX, offsetY, drawW, drawH);
-        }
-        ctx.restore();
-      }
-      ctx.globalAlpha = 1;
     } else {
       ctx.fillStyle = "#000"; ctx.fillRect(0,0,canvas.width,canvas.height);
+    }
+
+    if (cam.videoWidth && cam.videoHeight && canvas.width && canvas.height) {
+      const scale = Math.min(canvas.width / cam.videoWidth, canvas.height / cam.videoHeight);
+      const drawW = cam.videoWidth * scale;
+      const drawH = cam.videoHeight * scale;
+      const offsetX = (canvas.width - drawW) / 2;
+      const offsetY = (canvas.height - drawH) / 2;
+
+      ctx.save();
+      // black bars around the camera view
+      ctx.fillStyle = "#000";
+      if (offsetX > 0) {
+        ctx.fillRect(0, 0, offsetX, canvas.height);
+        ctx.fillRect(canvas.width - offsetX, 0, offsetX, canvas.height);
+      }
+      if (offsetY > 0) {
+        ctx.fillRect(0, 0, canvas.width, offsetY);
+        ctx.fillRect(0, canvas.height - offsetY, canvas.width, offsetY);
+      }
+
+      const overlayAlpha = parseFloat(alpha.value || "0.5");
+      ctx.globalAlpha = overlayAlpha;
+      ctx.fillRect(offsetX, offsetY, drawW, drawH);
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      if (invertCam) {
+        ctx.translate(drawW, 0);
+        ctx.scale(-1, 1);
+      }
+      ctx.drawImage(cam, 0, 0, drawW, drawH);
+      ctx.restore();
+      ctx.restore();
     }
     rafId = requestAnimationFrame(render);
   }
@@ -358,99 +651,95 @@ if (screen.orientation && screen.orientation.lock) {
   function resolveExportFps() {
     const sel = fpsSel?.value || "auto";
     if (sel === "auto") return Math.max(1, Math.round(fpsEstimate || 24));
-    return parseInt(sel, 10);
+    return parseInt(sel, 10) || Math.max(1, Math.round(fpsEstimate || 24));
   }
 
+  let syncCanvas = null;
+  let syncCtx = null;
+  function syncSnapshotSize() {
+    if (!canvas.width || !canvas.height) return;
+    if (!syncCanvas) {
+      syncCanvas = document.createElement("canvas");
+      syncCtx = syncCanvas.getContext("2d");
+    }
+    syncCanvas.width = canvas.width;
+    syncCanvas.height = canvas.height;
+  }
+
+  const chunks = [];
+  let recorder = null;
+  let outType = "video/webm";
+  let forcedPlay = false;
+
   async function exportFromSnapshots() {
-    if (exporting) { toast("Ya hay una exportación en curso.", "info"); return; }
-    if (!snapshots.length) { toast("No hay fotos para exportar.", "danger"); return; }
-    if (typeof MediaRecorder === "undefined") { toast("MediaRecorder no soportado en este navegador.", "danger"); return; }
-
-    const fpsOut = resolveExportFps();
+    if (!snapshots.length) { toast("No hay fotos para exportar.", "info"); return; }
+    if (exporting) return;
     exporting = true;
-    outBlob = null;
-    dlBtn.disabled = true;
-    shareBtn.disabled = true;
+    const fpsOut = resolveExportFps();
+
     if (exportBtn) exportBtn.disabled = true;
-    toast("Exportando animación…", "info");
-    cancelAnimationFrame(rafId);
 
-    let stream;
-    try {
-      stream = canvas.captureStream(fpsOut);
-    } catch (err) {
-      toast("Tu navegador no soporta exportar animaciones desde el canvas.", "danger");
-      if (exportBtn) exportBtn.disabled = false;
-      exporting = false;
-      rafId = requestAnimationFrame(render);
-      return;
-    }
-    const tracks = [ ...stream.getVideoTracks() ];
-    let audioTrack = null;
-    if (audioFromVideo && audioFromVideo.readyState !== "ended") {
-      try { audioTrack = audioFromVideo.clone(); }
-      catch { audioTrack = audioFromVideo; }
-      if (audioTrack) tracks.push(audioTrack);
-    }
-    const mixed = new MediaStream(tracks);
+    if (!syncCanvas) syncSnapshotSize();
 
-    const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus"
-                : MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus") ? "video/webm;codecs=vp8,opus"
-                : "video/webm";
+    const stream = syncCanvas.captureStream?.(fpsOut) || syncCanvas.mozCaptureStream?.(fpsOut);
+    if (!stream) { toast("No se pudo crear stream de exportación", "danger"); exporting = false; if (exportBtn) exportBtn.disabled = false; return; }
 
-    let recorder;
-    try {
-      recorder = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 8_000_000 });
-    } catch (err) {
-      toast("No se pudo iniciar la exportación.", "danger");
-      stream.getTracks().forEach(t => t.stop());
-      if (audioTrack && audioTrack !== audioFromVideo) {
-        try { audioTrack.stop(); } catch {}
+    let options = { mimeType: "video/webm; codecs=vp9" };
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options = { mimeType: "video/webm; codecs=vp8" };
+      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+        options = { mimeType: "video/webm" };
       }
-      if (exportBtn) exportBtn.disabled = false;
+    }
+
+    try {
+      recorder = new MediaRecorder(stream, options);
+      outType = recorder.mimeType || "video/webm";
+    } catch (err) {
+      toast("No se pudo iniciar la grabación.", "danger");
       exporting = false;
-      rafId = requestAnimationFrame(render);
+      if (exportBtn) exportBtn.disabled = false;
       return;
     }
 
-    const chunks = [];
-    recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    chunks.length = 0;
 
-    const stopped = new Promise(resolve => {
+    recorder.ondataavailable = e => { if (e.data?.size) chunks.push(e.data); };
+    const stopped = new Promise((resolve, reject) => {
       recorder.onstop = () => {
-        stream.getTracks().forEach(t => t.stop());
+        try { stream.getTracks().forEach(t => t.stop()); } catch {}
         if (audioTrack && audioTrack !== audioFromVideo) {
           try { audioTrack.stop(); } catch {}
         }
-        outBlob = new Blob(chunks, { type: mime });
+        outBlob = new Blob(chunks, { type: outType });
         toast("Animación exportada.", "ok");
         dlBtn.disabled = false;
         shareBtn.disabled = false;
         resolve();
       };
+      recorder.onerror = event => {
+        try { stream.getTracks().forEach(t => t.stop()); } catch {}
+        if (audioTrack && audioTrack !== audioFromVideo) {
+          try { audioTrack.stop(); } catch {}
+        }
+        reject(event.error || event);
+      };
     });
 
     const prevTime = vid.currentTime;
-    const wasPaused = vid.paused;
     const prevMuted = vid.muted;
     const prevVolume = vid.volume;
-    let forcedPlay = false;
-    try {
-      recorder.start(250);
-    } catch (err) {
-      toast("No se pudo iniciar la exportación.", "danger");
-      stream.getTracks().forEach(t => t.stop());
-      if (audioTrack && audioTrack !== audioFromVideo) {
-        try { audioTrack.stop(); } catch {}
-      }
-      vid.currentTime = prevTime;
-      if (!wasPaused) { vid.play().catch(()=>{}); }
-      else { vid.pause(); }
-      if (exportBtn) exportBtn.disabled = false;
-      exporting = false;
-      rafId = requestAnimationFrame(render);
-      return;
+    const wasPaused = vid.paused;
+
+    const audioTrack = audioFromVideo ? audioFromVideo.clone() : null;
+    if (audioTrack) {
+      stream.addTrack(audioTrack);
     }
+
+    recorder.start();
+
+    const ctx = syncCtx;
+    const canvas = syncCanvas;
 
     try { vid.pause(); vid.currentTime = 0; } catch {}
 
@@ -513,7 +802,15 @@ if (screen.orientation && screen.orientation.lock) {
       try { recorder.stop(); } catch {}
     }, frameDurMs);
 
-    await stopped;
+    try {
+      await stopped;
+    } catch (err) {
+      toast("Error durante la exportación.", "danger");
+      exporting = false;
+      if (exportBtn) exportBtn.disabled = false;
+      rafId = requestAnimationFrame(render);
+      return;
+    }
 
     if (forcedPlay) {
       try { vid.pause(); } catch {}
