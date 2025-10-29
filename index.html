@@ -220,7 +220,16 @@ if (screen.orientation && screen.orientation.lock) {
     if (vid.videoWidth) {
       ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
       ctx.globalAlpha = parseFloat(alpha.value || "0.5");
-      if (cam.videoWidth) ctx.drawImage(cam, 0, 0, canvas.width, canvas.height);
+      if (cam.videoWidth && cam.videoHeight) {
+        const scale = Math.min(canvas.width / cam.videoWidth, canvas.height / cam.videoHeight);
+        const drawW = cam.videoWidth * scale;
+        const drawH = cam.videoHeight * scale;
+        const offsetX = (canvas.width - drawW) / 2;
+        const offsetY = (canvas.height - drawH) / 2;
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(cam, offsetX, offsetY, drawW, drawH);
+      }
       ctx.globalAlpha = 1;
     } else {
       ctx.fillStyle = "#000"; ctx.fillRect(0,0,canvas.width,canvas.height);
