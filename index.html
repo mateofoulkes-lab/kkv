@@ -23,11 +23,14 @@
   #log { position:fixed; top:3.2rem; left:.5rem; right:.5rem; text-wrap:balance; opacity:.95; display:flex; gap:.5rem; align-items:center; justify-content:center; }
   #banner { position:fixed; top:.5rem; left:.5rem; right:.5rem; display:none; gap:.5rem; align-items:center; justify-content:space-between; background:#123; border:1px solid #345; padding:.5rem .75rem; border-radius:12px; }
   #banner .msg{ font-size:.95rem; }
+  #versionTag { position:fixed; top:.5rem; right:.5rem; font-size:.8rem; letter-spacing:.08em; background:#000c; border:1px solid #333; border-radius:999px; padding:.2rem .6rem; color:#bbb; text-transform:uppercase; pointer-events:none; }
 </style>
 
 <div id="stage">
   <canvas id="canvas"></canvas>
 </div>
+
+<div id="versionTag"></div>
 
 <div id="banner">
   <div class="msg">Hay una nueva versión disponible.</div>
@@ -72,6 +75,13 @@
 </div>
 
 <script>
+const APP_VERSION = "2.1.0";
+const versionTag = document.getElementById("versionTag");
+if (versionTag) {
+  versionTag.textContent = `v${APP_VERSION}`;
+  versionTag.setAttribute("aria-label", `Versión ${APP_VERSION}`);
+}
+
 // PWA install & update handling
 let deferredPrompt = null;
 const installBtn = document.getElementById('install');
