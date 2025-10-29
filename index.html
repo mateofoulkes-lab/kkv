@@ -220,7 +220,12 @@ if (screen.orientation && screen.orientation.lock) {
       canvas.width = Math.round(w * scale);
       canvas.height = Math.round(h * scale);
     };
-    fit(); addEventListener("resize", fit);
+    const applyFit = () => {
+      fit();
+      syncSnapshotSize();
+    };
+    applyFit();
+    addEventListener("resize", applyFit);
 
     try {
       videoCaptureStream?.getTracks?.().forEach(t => t.stop());
