@@ -49,12 +49,25 @@
     <input id="alpha" type="range" min="0" max="1" step="0.05" value="0.5">
     <span id="alphaV" class="pill">50%</span>
   </label>
+  <label>Invertir cámara
+    <input id="flipCam" type="checkbox" checked>
+  </label>
   <button id="camToggle">🔄 cámara: frontal</button>
   <button id="voice">🎤 voz: off</button>
-  <button id="rec" class="info">⏺️ grabar</button>
-  <button id="stopRec" class="danger" disabled>⏹️ detener</button>
   <button id="download">⬇️ descargar MP4/WebM</button>
   <button id="share">📤 compartir</button>
+  <button id="clearShots">🧻 borrar fotos</button>
+  <select id="fpsSel" title="FPS de exportación">
+    <option value="auto" selected>FPS: auto (origen)</option>
+    <option value="12">FPS: 12</option>
+    <option value="15">FPS: 15</option>
+    <option value="24">FPS: 24</option>
+    <option value="25">FPS: 25</option>
+    <option value="30">FPS: 30</option>
+    <option value="60">FPS: 60</option>
+  </select>
+  <button id="exportAnim" class="info">🎬 exportar animación</button>
+  <span id="shotsCount" class="pill">0 fotos</span>
   <button id="install" style="display:none;">⬇️ Instalar app</button>
 </div>
 
@@ -125,11 +138,32 @@ if (screen.orientation && screen.orientation.lock) {
   const playBtn = $("#play"), pauseBtn = $("#pause");
   const back = $("#back"), fwd = $("#fwd");
   const alpha = $("#alpha"), alphaV = $("#alphaV");
+  const flipCam = $("#flipCam");
   const camToggle = $("#camToggle");
   const voiceBtn = $("#voice");
-  const recBtn = $("#rec"), stopRecBtn = $("#stopRec");
   const dlBtn = $("#download"), shareBtn = $("#share");
+  const clearBtn = $("#clearShots");
+  const shotsCount = $("#shotsCount");
+  const fpsSel = $("#fpsSel");
+  const exportBtn = $("#exportAnim");
   const log = $("#log");
+
+  dlBtn.disabled = true;
+  shareBtn.disabled = true;
+
+  const snapshots = [];
+  const updateShotsCount = () => {
+    if (shotsCount) shotsCount.textContent = `${snapshots.length} fotos`;
+  };
+  updateShotsCount();
+
+  if (clearBtn) {
+    clearBtn.onclick = () => {
+      snapshots.length = 0;
+      updateShotsCount();
+      toast("Fotos borradas", "info");
+    };
+  }
 
   // Elementos ocultos de trabajo
   const vid = document.createElement("video");
@@ -143,12 +177,12 @@ if (screen.orientation && screen.orientation.lock) {
   let framesRequested = false;
   let fpsEstimate = 30;
   let sr = null, voiceOn = false;
-  let recorder = null, recordedChunks = [];
   let outBlob = null;
   let audioFromVideo = null;
   let videoCaptureStream = null;
-  let canvasStream = null;
   let rafId = 0;
+  let invertCam = true;
+  let exporting = false;
 
   function toast(msg, kind="ok") {
     log.innerHTML = `<span class="pill ${kind}">${msg}</span>`;
@@ -171,7 +205,11 @@ if (screen.orientation && screen.orientation.lock) {
 
   file.addEventListener("change", async () => {
     const f = file.files?.[0]; if (!f) return;
-    outBlob = null; recordedChunks = [];
+    outBlob = null;
+    dlBtn.disabled = true;
+    shareBtn.disabled = true;
+    snapshots.length = 0;
+    updateShotsCount();
     vid.src = URL.createObjectURL(f);
     await vid.play().catch(()=>vid.pause());
 
@@ -185,11 +223,13 @@ if (screen.orientation && screen.orientation.lock) {
     fit(); addEventListener("resize", fit);
 
     try {
+      videoCaptureStream?.getTracks?.().forEach(t => t.stop());
       videoCaptureStream = vid.captureStream?.() || vid.mozCaptureStream?.();
       const aTracks = videoCaptureStream?.getAudioTracks?.() || [];
       audioFromVideo = aTracks?.[0] || null;
       if (!audioFromVideo) toast("No se detectó pista de audio en el video (o no es capturable).", "info");
     } catch(e) {
+      videoCaptureStream = null;
       audioFromVideo = null; toast("Audio del video no capturable en este navegador.", "info");
     }
 
@@ -217,6 +257,7 @@ if (screen.orientation && screen.orientation.lock) {
   });
 
   function render() {
+    if (exporting) return;
     if (vid.videoWidth) {
       ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
       ctx.globalAlpha = parseFloat(alpha.value || "0.5");
@@ -228,7 +269,15 @@ if (screen.orientation && screen.orientation.lock) {
         const offsetY = (canvas.height - drawH) / 2;
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(cam, offsetX, offsetY, drawW, drawH);
+        ctx.save();
+        if (invertCam) {
+          ctx.translate(offsetX + drawW, offsetY);
+          ctx.scale(-1, 1);
+          ctx.drawImage(cam, 0, 0, drawW, drawH);
+        } else {
+          ctx.drawImage(cam, offsetX, offsetY, drawW, drawH);
+        }
+        ctx.restore();
       }
       ctx.globalAlpha = 1;
     } else {
@@ -251,6 +300,11 @@ if (screen.orientation && screen.orientation.lock) {
     await startCamera();
   };
 
+  flipCam.addEventListener("change", () => {
+    invertCam = !!flipCam.checked;
+  });
+  invertCam = !!flipCam.checked;
+
   function toggleVoice() {
     if (voiceOn) {
       try { sr?.stop(); } catch {}
@@ -268,61 +322,203 @@ if (screen.orientation && screen.orientation.lock) {
       else if (phrase.includes("adelante")) fwd.click();
       else if (phrase.includes("tres segundos")) setTimeout(()=>takeSnapshot(), 3000);
       else if (phrase.includes("diez segundos")) setTimeout(()=>takeSnapshot(), 10000);
-      else if (phrase.includes("grabar") || phrase.includes("grabación")) startRecording();
-      else if (phrase.includes("detener") || phrase.includes("parar")) stopRecording();
+      else if (phrase.includes("grabar") || phrase.includes("grabación") || phrase.includes("exportar")) exportFromSnapshots();
+      else if (phrase.includes("detener") || phrase.includes("parar")) toast("No hay grabación en vivo que detener.", "info");
     };
     sr.onend = () => { if (voiceOn) try { sr.start(); } catch {} };
     try { sr.start(); voiceOn = true; voiceBtn.textContent = "🎤 voz: ON"; toast("Voz activada","ok"); } catch {}
   }
   voiceBtn.onclick = toggleVoice;
 
-  const snapshots = [];
   async function takeSnapshot() {
-    canvas.toBlob(b => { if (b) { snapshots.push(b); toast(`Foto ${snapshots.length}`, "ok"); } }, "image/png");
+    canvas.toBlob(b => {
+      if (b) {
+        snapshots.push(b);
+        updateShotsCount();
+        toast(`Foto ${snapshots.length}`, "ok");
+      }
+    }, "image/png");
   }
 
-  function buildMixedStream() {
-    canvasStream = canvas.captureStream(Math.max(10, Math.min(60, fpsEstimate || 30)));
-    const tracks = [ ...canvasStream.getVideoTracks() ];
-    if (audioFromVideo) tracks.push(audioFromVideo);
-    return new MediaStream(tracks);
+  function resolveExportFps() {
+    const sel = fpsSel?.value || "auto";
+    if (sel === "auto") return Math.max(1, Math.round(fpsEstimate || 24));
+    return parseInt(sel, 10);
   }
 
-  async function startRecording() {
-    if (!vid.src) { toast("Cargá un video primero.", "danger"); return; }
-    if (recorder) { toast("Ya estás grabando.", "info"); return; }
-    recordedChunks = []; outBlob = null;
+  async function exportFromSnapshots() {
+    if (exporting) { toast("Ya hay una exportación en curso.", "info"); return; }
+    if (!snapshots.length) { toast("No hay fotos para exportar.", "danger"); return; }
+    if (typeof MediaRecorder === "undefined") { toast("MediaRecorder no soportado en este navegador.", "danger"); return; }
 
-    const mixed = buildMixedStream();
+    const fpsOut = resolveExportFps();
+    exporting = true;
+    outBlob = null;
+    dlBtn.disabled = true;
+    shareBtn.disabled = true;
+    if (exportBtn) exportBtn.disabled = true;
+    toast("Exportando animación…", "info");
+    cancelAnimationFrame(rafId);
+
+    let stream;
+    try {
+      stream = canvas.captureStream(fpsOut);
+    } catch (err) {
+      toast("Tu navegador no soporta exportar animaciones desde el canvas.", "danger");
+      if (exportBtn) exportBtn.disabled = false;
+      exporting = false;
+      rafId = requestAnimationFrame(render);
+      return;
+    }
+    const tracks = [ ...stream.getVideoTracks() ];
+    let audioTrack = null;
+    if (audioFromVideo && audioFromVideo.readyState !== "ended") {
+      try { audioTrack = audioFromVideo.clone(); }
+      catch { audioTrack = audioFromVideo; }
+      if (audioTrack) tracks.push(audioTrack);
+    }
+    const mixed = new MediaStream(tracks);
+
     const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus"
                 : MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus") ? "video/webm;codecs=vp8,opus"
                 : "video/webm";
 
-    recorder = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 8_000_000 });
-    recorder.ondataavailable = e => { if (e.data && e.data.size) recordedChunks.push(e.data); };
-    recorder.onstop = () => {
-      outBlob = new Blob(recordedChunks, { type: mime });
-      toast("Grabación lista.", "ok");
-      dlBtn.disabled = false; shareBtn.disabled = false;
-    };
-    recorder.start(250);
+    let recorder;
+    try {
+      recorder = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 8_000_000 });
+    } catch (err) {
+      toast("No se pudo iniciar la exportación.", "danger");
+      stream.getTracks().forEach(t => t.stop());
+      if (audioTrack && audioTrack !== audioFromVideo) {
+        try { audioTrack.stop(); } catch {}
+      }
+      if (exportBtn) exportBtn.disabled = false;
+      exporting = false;
+      rafId = requestAnimationFrame(render);
+      return;
+    }
 
-    vid.currentTime = 0;
-    await vid.play();
-    toast("Grabando…", "info");
-    recBtn.disabled = true; stopRecBtn.disabled = false;
+    const chunks = [];
+    recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+
+    const stopped = new Promise(resolve => {
+      recorder.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        if (audioTrack && audioTrack !== audioFromVideo) {
+          try { audioTrack.stop(); } catch {}
+        }
+        outBlob = new Blob(chunks, { type: mime });
+        toast("Animación exportada.", "ok");
+        dlBtn.disabled = false;
+        shareBtn.disabled = false;
+        resolve();
+      };
+    });
+
+    const prevTime = vid.currentTime;
+    const wasPaused = vid.paused;
+    const prevMuted = vid.muted;
+    const prevVolume = vid.volume;
+    let forcedPlay = false;
+    try {
+      recorder.start(250);
+    } catch (err) {
+      toast("No se pudo iniciar la exportación.", "danger");
+      stream.getTracks().forEach(t => t.stop());
+      if (audioTrack && audioTrack !== audioFromVideo) {
+        try { audioTrack.stop(); } catch {}
+      }
+      vid.currentTime = prevTime;
+      if (!wasPaused) { vid.play().catch(()=>{}); }
+      else { vid.pause(); }
+      if (exportBtn) exportBtn.disabled = false;
+      exporting = false;
+      rafId = requestAnimationFrame(render);
+      return;
+    }
+
+    try { vid.pause(); vid.currentTime = 0; } catch {}
+
+    if (audioTrack) {
+      try {
+        vid.volume = 0;
+        await vid.play();
+        forcedPlay = true;
+      } catch {
+        forcedPlay = false;
+      }
+    }
+
+    const frameDurMs = 1000 / fpsOut;
+    const wait = ms => new Promise(res => setTimeout(res, ms));
+    const loadImage = blob => new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve(img);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("No se pudo cargar la foto"));
+      };
+      img.src = url;
+    });
+
+    try {
+      for (let i = 0; i < snapshots.length; i++) {
+        const img = await loadImage(snapshots[i]);
+        ctx.save();
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+        if (typeof img.close === "function") img.close();
+        await wait(frameDurMs);
+      }
+    } catch (err) {
+      toast("Error al exportar la animación.", "danger");
+      try { recorder.stop(); } catch {}
+      await stopped;
+      if (forcedPlay) {
+        try { vid.pause(); } catch {}
+      }
+      vid.muted = prevMuted;
+      vid.volume = prevVolume;
+      exporting = false;
+      vid.currentTime = prevTime;
+      if (!wasPaused) { vid.play().catch(()=>{}); }
+      else { vid.pause(); }
+      if (exportBtn) exportBtn.disabled = false;
+      rafId = requestAnimationFrame(render);
+      return;
+    }
+
+    setTimeout(() => {
+      try { recorder.stop(); } catch {}
+    }, frameDurMs);
+
+    await stopped;
+
+    if (forcedPlay) {
+      try { vid.pause(); } catch {}
+    }
+    vid.muted = prevMuted;
+    vid.volume = prevVolume;
+
+    vid.currentTime = prevTime;
+    if (!wasPaused) {
+      vid.play().catch(()=>{});
+    } else {
+      vid.pause();
+    }
+
+    exporting = false;
+    if (exportBtn) exportBtn.disabled = false;
+    rafId = requestAnimationFrame(render);
   }
 
-  function stopRecording() {
-    if (!recorder) return;
-    try { recorder.stop(); } catch {}
-    try { vid.pause(); } catch {}
-    recBtn.disabled = false; stopRecBtn.disabled = true;
-    recorder = null;
-  }
-
-  recBtn.onclick = startRecording;
-  stopRecBtn.onclick = stopRecording;
+  if (exportBtn) exportBtn.onclick = exportFromSnapshots;
 
   dlBtn.onclick = () => {
     if (!outBlob) { toast("No hay video exportado.", "danger"); return; }
