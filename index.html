@@ -49,6 +49,9 @@
     <input id="alpha" type="range" min="0" max="1" step="0.05" value="0.5">
     <span id="alphaV" class="pill">50%</span>
   </label>
+  <label>Invertir cámara
+    <input id="flipCam" type="checkbox" checked>
+  </label>
   <button id="camToggle">🔄 cámara: frontal</button>
   <button id="voice">🎤 voz: off</button>
   <button id="rec" class="info">⏺️ grabar</button>
@@ -125,6 +128,7 @@ if (screen.orientation && screen.orientation.lock) {
   const playBtn = $("#play"), pauseBtn = $("#pause");
   const back = $("#back"), fwd = $("#fwd");
   const alpha = $("#alpha"), alphaV = $("#alphaV");
+  const flipCam = $("#flipCam");
   const camToggle = $("#camToggle");
   const voiceBtn = $("#voice");
   const recBtn = $("#rec"), stopRecBtn = $("#stopRec");
@@ -149,6 +153,7 @@ if (screen.orientation && screen.orientation.lock) {
   let videoCaptureStream = null;
   let canvasStream = null;
   let rafId = 0;
+  let invertCam = true;
 
   function toast(msg, kind="ok") {
     log.innerHTML = `<span class="pill ${kind}">${msg}</span>`;
@@ -220,7 +225,24 @@ if (screen.orientation && screen.orientation.lock) {
     if (vid.videoWidth) {
       ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
       ctx.globalAlpha = parseFloat(alpha.value || "0.5");
-      if (cam.videoWidth) ctx.drawImage(cam, 0, 0, canvas.width, canvas.height);
+      if (cam.videoWidth && cam.videoHeight) {
+        const scale = Math.min(canvas.width / cam.videoWidth, canvas.height / cam.videoHeight);
+        const drawW = cam.videoWidth * scale;
+        const drawH = cam.videoHeight * scale;
+        const offsetX = (canvas.width - drawW) / 2;
+        const offsetY = (canvas.height - drawH) / 2;
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        if (invertCam) {
+          ctx.translate(offsetX + drawW, offsetY);
+          ctx.scale(-1, 1);
+          ctx.drawImage(cam, 0, 0, drawW, drawH);
+        } else {
+          ctx.drawImage(cam, offsetX, offsetY, drawW, drawH);
+        }
+        ctx.restore();
+      }
       ctx.globalAlpha = 1;
     } else {
       ctx.fillStyle = "#000"; ctx.fillRect(0,0,canvas.width,canvas.height);
@@ -241,6 +263,11 @@ if (screen.orientation && screen.orientation.lock) {
     facing = (facing === "user") ? "environment" : "user";
     await startCamera();
   };
+
+  flipCam.addEventListener("change", () => {
+    invertCam = !!flipCam.checked;
+  });
+  invertCam = !!flipCam.checked;
 
   function toggleVoice() {
     if (voiceOn) {
