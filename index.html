@@ -37,7 +37,14 @@
     justify-content: center;
     padding: clamp(1.5rem, 5vh, 3rem) 1.5rem calc(18rem + env(safe-area-inset-bottom));
   }
-  #viewer {
+  #viewerWrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(1.2rem, 3vh, 1.8rem);
+    width: 100%;
+  }
+  .viewerShell {
     position: relative;
     display: grid;
     place-items: center;
@@ -49,6 +56,7 @@
     max-width: min(92vw, 1100px);
     width: 100%;
   }
+  #viewer, #photoPreview { width: 100%; }
   canvas {
     width: 100%;
     height: auto;
@@ -56,6 +64,26 @@
     border-radius: clamp(14px, 2vw, 24px);
     background: #000;
   }
+  #photoPreview {
+    min-height: clamp(180px, 32vh, 360px);
+  }
+  #photoPreview canvas {
+    background: #05060a;
+  }
+  #photoPreview.no-photo canvas { visibility: hidden; }
+  #previewEmpty {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 1rem;
+    color: #a5afd9;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    pointer-events: none;
+  }
+  #photoPreview:not(.no-photo) #previewEmpty { display: none; }
   .hud {
     position: absolute;
     pointer-events: none;
@@ -125,6 +153,7 @@
     box-shadow: 0 18px 45px -25px rgba(12, 14, 25, 0.8), inset 0 0 0 6px rgba(7, 10, 22, 0.25);
     cursor: pointer;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
+    margin: 0 auto;
   }
   #shutter:focus-visible {
     outline: 3px solid var(--accent);
@@ -152,6 +181,71 @@
   }
   #back.frameNav { left: clamp(0.6rem, 2vw, 1.4rem); }
   #fwd.frameNav { right: clamp(0.6rem, 2vw, 1.4rem); }
+
+  #fsExit {
+    position: absolute;
+    top: clamp(0.75rem, 2vw, 1.25rem);
+    right: clamp(0.85rem, 2vw, 1.5rem);
+    width: clamp(2.6rem, 5vw, 3.2rem);
+    height: clamp(2.6rem, 5vw, 3.2rem);
+    border-radius: 999px;
+    border: 1px solid var(--button-border);
+    background: var(--button-bg);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(1.2rem, 3vw, 1.6rem);
+    color: #f7fbff;
+    cursor: pointer;
+    transition: transform 0.2s ease, background 0.2s ease;
+    pointer-events: auto;
+    box-shadow: 0 15px 35px -22px rgba(10, 12, 22, 0.85);
+  }
+  #fsExit:hover { background: var(--button-hover); transform: scale(1.05); }
+  #fsExit:active { transform: scale(0.94); }
+
+  body.fs-active {
+    overflow: hidden;
+  }
+  body.fs-active #ui,
+  body.fs-active #banner,
+  body.fs-active #log,
+  body.fs-active #versionTag {
+    display: none !important;
+  }
+  body.fs-active #stage {
+    padding: clamp(1rem, 3vh, 2rem);
+    align-items: center;
+    min-height: 100svh;
+  }
+  body.fs-active #viewerWrap {
+    position: relative;
+    height: 100%;
+    justify-content: center;
+    gap: clamp(1.8rem, 4vh, 2.8rem);
+  }
+  body.fs-active #viewer {
+    max-width: min(96vw, 1400px);
+  }
+  body.fs-active #viewer canvas {
+    max-height: none;
+  }
+  body.fs-active #photoPreview {
+    display: none;
+  }
+  body.fs-active #shutter {
+    position: absolute;
+    bottom: clamp(1.5rem, 6vh, 3.5rem);
+    left: 50%;
+    transform: translateX(-50%);
+    margin: 0;
+  }
+  body.fs-active #shutter:active {
+    transform: translateX(-50%) scale(0.94);
+  }
+  body.fs-active #fsExit {
+    display: flex;
+  }
 
   #versionTag {
     position: fixed;
@@ -339,7 +433,7 @@
     #viewerWrap { gap: 1rem; }
   }
   @media (max-width: 600px) {
-    #viewer {
+    .viewerShell {
       padding: 0.7rem;
     }
     .frameNav {
@@ -364,14 +458,19 @@
 
 <div id="stage">
   <div id="viewerWrap">
-    <div id="viewer">
+    <div id="viewer" class="viewerShell">
       <canvas id="canvas"></canvas>
       <div id="frameInfo" class="hud" aria-live="polite"></div>
       <div id="countdown" class="hud" aria-live="assertive" aria-atomic="true"><span></span></div>
       <button id="back" class="frameNav" aria-label="Cuadro anterior" disabled>❮</button>
       <button id="fwd" class="frameNav" aria-label="Cuadro siguiente" disabled>❯</button>
+      <button id="fsExit" aria-label="Salir de pantalla completa">⤡</button>
     </div>
     <button id="shutter" aria-label="Tomar foto"><span></span></button>
+    <div id="photoPreview" class="viewerShell no-photo" aria-live="polite">
+      <canvas id="previewCanvas"></canvas>
+      <div id="previewEmpty">Sin foto para este cuadro</div>
+    </div>
   </div>
 </div>
 
@@ -398,6 +497,7 @@
     <button id="pause" aria-label="Pausar">⏸️</button>
     <button id="camToggle">🔄 cámara: frontal</button>
     <button id="voice">🎤 voz: off</button>
+    <button id="fullscreen" aria-label="Pantalla completa">⤢</button>
     <span id="shotsCount" class="pill">0 fotos</span>
   </div>
   <div class="row">
@@ -426,7 +526,7 @@
 </div>
 
 <script>
-const APP_VERSION = "2.2.0";
+const APP_VERSION = "2.3.0";
 const versionTag = document.getElementById("versionTag");
 if (versionTag) {
   versionTag.textContent = `v${APP_VERSION}`;
@@ -483,6 +583,9 @@ if ('serviceWorker' in navigator) {
   const flipCam = $("#flipCam");
   const camToggle = $("#camToggle");
   const voiceBtn = $("#voice");
+  const fullscreenBtn = $("#fullscreen");
+  const fsExitBtn = $("#fsExit");
+  const stage = $("#stage");
   const dlBtn = $("#download"), shareBtn = $("#share");
   const clearBtn = $("#clearShots");
   const shotsCount = $("#shotsCount");
@@ -493,6 +596,9 @@ if ('serviceWorker' in navigator) {
   const frameInfo = $("#frameInfo");
   const countdown = $("#countdown");
   const countdownValue = countdown?.querySelector("span");
+  const photoPreview = $("#photoPreview");
+  const previewCanvas = $("#previewCanvas");
+  const previewCtx = previewCanvas?.getContext("2d");
 
   dlBtn.disabled = true;
   shareBtn.disabled = true;
@@ -500,14 +606,20 @@ if ('serviceWorker' in navigator) {
 
   const snapshots = [];
   const updateShotsCount = () => {
-    if (shotsCount) shotsCount.textContent = `${snapshots.length} fotos`;
+    if (!shotsCount) return;
+    const count = snapshots.length;
+    shotsCount.textContent = `${count} foto${count === 1 ? "" : "s"}`;
   };
   updateShotsCount();
 
   if (clearBtn) {
     clearBtn.onclick = () => {
-      snapshots.length = 0;
+      while (snapshots.length) {
+        const snap = snapshots.pop();
+        releaseSnapshotResources(snap);
+      }
       updateShotsCount();
+      updatePreviewForCurrentTime();
       toast("Fotos borradas", "info");
     };
   }
@@ -530,6 +642,7 @@ if ('serviceWorker' in navigator) {
   let camStream = null;
   let framesRequested = false;
   let fpsEstimate = null;
+  let fpsFromMetadata = null;
   let sr = null, voiceOn = false;
   let outBlob = null;
   let audioFromVideo = null;
@@ -542,10 +655,159 @@ if ('serviceWorker' in navigator) {
   let countdownTimeout = null;
   let voiceHeardTimeout = null;
   let frameInfoCache = frameInfo?.textContent || "";
+  let previewToken = 0;
+  let lastPreviewSnap = null;
+  let fsActive = false;
 
   function toast(msg, kind="ok") {
     log.innerHTML = `<span class="pill ${kind}">${msg}</span>`;
     clearTimeout(toast.tid); toast.tid = setTimeout(()=>log.innerHTML="", 2000);
+  }
+
+  function getEffectiveFps() {
+    const trackFps = videoCaptureStream?.getVideoTracks?.()[0]?.getSettings?.().frameRate;
+    const source = fpsEstimate || fpsFromMetadata || (trackFps ? Number(trackFps) : 0);
+    return Math.max(1, Math.round(source || 30));
+  }
+
+  function frameTolerance() {
+    return 0.5 / getEffectiveFps();
+  }
+
+  function loadBlobImage(blob) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve(img);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("No se pudo cargar la foto"));
+      };
+      img.src = url;
+    });
+  }
+
+  function releaseSnapshotResources(snapshot) {
+    if (!snapshot) return;
+    if (snapshot.drawable && typeof snapshot.drawable.close === "function") {
+      try { snapshot.drawable.close(); } catch {}
+    }
+    snapshot.drawable = null;
+    snapshot.drawablePromise = null;
+  }
+
+  function getSnapshotDrawable(snapshot) {
+    if (!snapshot) return Promise.resolve(null);
+    if (snapshot.drawable) return Promise.resolve(snapshot.drawable);
+    if (snapshot.drawablePromise) return snapshot.drawablePromise;
+    if ("createImageBitmap" in window) {
+      snapshot.drawablePromise = createImageBitmap(snapshot.blob).then(bitmap => {
+        snapshot.drawable = bitmap;
+        return bitmap;
+      }).catch(async () => {
+        const fallback = await loadBlobImage(snapshot.blob);
+        snapshot.drawable = fallback;
+        return fallback;
+      });
+    } else {
+      snapshot.drawablePromise = loadBlobImage(snapshot.blob).then(img => {
+        snapshot.drawable = img;
+        return img;
+      });
+    }
+    return snapshot.drawablePromise;
+  }
+
+  function insertSnapshot(entry) {
+    const tol = frameTolerance();
+    for (let i = 0; i < snapshots.length; i++) {
+      const snap = snapshots[i];
+      if (Math.abs(snap.time - entry.time) <= tol) {
+        releaseSnapshotResources(snap);
+        snapshots[i] = entry;
+        return { replaced: true, index: i };
+      }
+      if (snap.time > entry.time) {
+        snapshots.splice(i, 0, entry);
+        return { replaced: false, index: i };
+      }
+    }
+    snapshots.push(entry);
+    return { replaced: false, index: snapshots.length - 1 };
+  }
+
+  function findSnapshotForTime(time) {
+    if (!snapshots.length) return null;
+    const tol = frameTolerance();
+    for (let i = 0; i < snapshots.length; i++) {
+      const snap = snapshots[i];
+      if (Math.abs(snap.time - time) <= tol) return snap;
+      if (snap.time > time && (snap.time - time) > tol) break;
+    }
+    return null;
+  }
+
+  function updatePreviewForTime(time) {
+    if (!photoPreview || !previewCanvas || !previewCtx) return;
+    const snap = findSnapshotForTime(time);
+    if (snap === lastPreviewSnap) return;
+    lastPreviewSnap = snap;
+    const token = ++previewToken;
+
+    if (!snap) {
+      previewCtx.clearRect(0, 0, previewCanvas.width || 0, previewCanvas.height || 0);
+      photoPreview.classList.add("no-photo");
+      return;
+    }
+
+    getSnapshotDrawable(snap).then(drawable => {
+      if (previewToken !== token) return;
+      if (!drawable) {
+        photoPreview.classList.add("no-photo");
+        return;
+      }
+      previewCanvas.width = snap.width;
+      previewCanvas.height = snap.height;
+      previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+      previewCtx.drawImage(drawable, 0, 0, previewCanvas.width, previewCanvas.height);
+      photoPreview.classList.remove("no-photo");
+    }).catch(() => {
+      if (previewToken !== token) return;
+      photoPreview.classList.add("no-photo");
+    });
+  }
+
+  function updatePreviewForCurrentTime() {
+    updatePreviewForTime(vid.currentTime || 0);
+  }
+
+  async function enterFullscreen() {
+    if (fsActive) return;
+    if (stage?.requestFullscreen) {
+      try {
+        await stage.requestFullscreen();
+        return;
+      } catch (err) {
+        // fallback below
+      }
+    }
+    document.body.classList.add("fs-active");
+    fsActive = true;
+  }
+
+  async function exitFullscreen() {
+    if (document.fullscreenElement) {
+      try { await document.exitFullscreen(); }
+      catch {}
+    }
+    if (!document.fullscreenElement) {
+      document.body.classList.remove("fs-active");
+      fsActive = false;
+      updatePreviewForCurrentTime();
+    }
   }
 
   function clearCountdown(hide = true) {
@@ -607,15 +869,14 @@ if ('serviceWorker' in navigator) {
   function updateFrameInfo() {
     if (!frameInfo) return;
     const duration = Number.isFinite(vid.duration) ? vid.duration : 0;
-    const fps = fpsEstimate ? Math.max(1, Math.round(fpsEstimate)) : null;
+    const fps = duration ? getEffectiveFps() : 0;
+    const time = vid.currentTime || 0;
     let text = "Cuadro -- / -- · FPS --";
 
     if (duration && fps) {
       const totalFrames = Math.max(1, Math.round(duration * fps));
-      const currentFrame = Math.min(totalFrames, Math.max(1, Math.round((vid.currentTime || 0) * fps) + 1));
+      const currentFrame = Math.min(totalFrames, Math.max(1, Math.round(time * fps) + 1));
       text = `Cuadro ${currentFrame} / ${totalFrames} · ${fps} fps`;
-    } else if (duration) {
-      text = "Cuadro -- / -- · FPS --";
     }
 
     if (text !== frameInfoCache) {
@@ -646,9 +907,14 @@ if ('serviceWorker' in navigator) {
     outBlob = null;
     dlBtn.disabled = true;
     shareBtn.disabled = true;
-    snapshots.length = 0;
+    while (snapshots.length) {
+      const snap = snapshots.pop();
+      releaseSnapshotResources(snap);
+    }
     updateShotsCount();
+    updatePreviewForCurrentTime();
     fpsEstimate = null;
+    fpsFromMetadata = null;
     clearCountdown();
     updateFrameInfo();
 
@@ -673,12 +939,8 @@ if ('serviceWorker' in navigator) {
       canvas.width = Math.round(w * scale);
       canvas.height = Math.round(h * scale);
     };
-    const applyFit = () => {
-      fit();
-      syncSnapshotSize();
-    };
-    applyFit();
-    resizeHandler = applyFit;
+    fit();
+    resizeHandler = fit;
     addEventListener("resize", resizeHandler);
 
     try {
@@ -686,10 +948,16 @@ if ('serviceWorker' in navigator) {
       videoCaptureStream = vid.captureStream?.() || vid.mozCaptureStream?.();
       const aTracks = videoCaptureStream?.getAudioTracks?.() || [];
       audioFromVideo = aTracks?.[0] || null;
+      const vTrack = videoCaptureStream?.getVideoTracks?.()[0];
+      const settings = vTrack?.getSettings?.() || {};
+      fpsFromMetadata = settings.frameRate ? Number(settings.frameRate) : null;
+      if (!fpsEstimate && fpsFromMetadata) updateFrameInfo();
       if (!audioFromVideo) toast("No se detectó pista de audio en el video (o no es capturable).", "info");
     } catch(e) {
       videoCaptureStream = null;
-      audioFromVideo = null; toast("Audio del video no capturable en este navegador.", "info");
+      audioFromVideo = null;
+      fpsFromMetadata = null;
+      toast("Audio del video no capturable en este navegador.", "info");
     }
 
     if ('requestVideoFrameCallback' in vid) {
@@ -761,12 +1029,13 @@ if ('serviceWorker' in navigator) {
       ctx.restore();
     }
     updateFrameInfo();
+    updatePreviewForCurrentTime();
     rafId = requestAnimationFrame(render);
   }
 
   playBtn.onclick = () => vid.play();
   pauseBtn.onclick = () => vid.pause();
-  const step = () => 1 / Math.max(1, Math.round(fpsEstimate||30));
+  const step = () => 1 / Math.max(1, getEffectiveFps());
   back.onclick = () => { vid.pause(); vid.currentTime = Math.max(0, vid.currentTime - step()); };
   fwd.onclick  = () => { vid.pause(); vid.currentTime = Math.min((vid.duration||0)-0.001, vid.currentTime + step()); };
 
@@ -818,6 +1087,31 @@ if ('serviceWorker' in navigator) {
   }
   voiceBtn.onclick = toggleVoice;
 
+  if (fullscreenBtn) {
+    fullscreenBtn.addEventListener("click", enterFullscreen);
+  }
+  if (fsExitBtn) {
+    fsExitBtn.addEventListener("click", exitFullscreen);
+  }
+
+  document.addEventListener("fullscreenchange", () => {
+    const active = !!document.fullscreenElement;
+    fsActive = active;
+    if (active) {
+      document.body.classList.add("fs-active");
+    } else {
+      document.body.classList.remove("fs-active");
+      fsActive = false;
+      updatePreviewForCurrentTime();
+    }
+  });
+
+  document.addEventListener("fullscreenerror", () => {
+    if (!fsActive) {
+      toast("No se pudo activar pantalla completa.", "danger");
+    }
+  });
+
   if (shutter) {
     shutter.addEventListener("click", () => {
       clearCountdown();
@@ -842,32 +1136,33 @@ if ('serviceWorker' in navigator) {
     camShotCtx.drawImage(cam, 0, 0, camShotCanvas.width, camShotCanvas.height);
     camShotCtx.restore();
 
+    const captureTime = vid.currentTime || 0;
     camShotCanvas.toBlob(b => {
-      if (b) {
-        snapshots.push(b);
-        updateShotsCount();
-        toast(`Foto ${snapshots.length}`, "ok");
-      }
+      if (!b) return;
+      const entry = {
+        time: captureTime,
+        blob: b,
+        width: camShotCanvas.width,
+        height: camShotCanvas.height,
+        drawable: null,
+        drawablePromise: null
+      };
+      const { replaced } = insertSnapshot(entry);
+      updateShotsCount();
+      updatePreviewForCurrentTime();
+      toast(replaced ? "Foto actualizada" : `Foto ${snapshots.length}`, "ok");
     }, "image/png");
   }
 
   function resolveExportFps() {
     const sel = fpsSel?.value || "auto";
-    if (sel === "auto") return Math.max(1, Math.round(fpsEstimate || 24));
-    return parseInt(sel, 10) || Math.max(1, Math.round(fpsEstimate || 24));
+    if (sel === "auto") return Math.max(1, Math.round(getEffectiveFps()));
+    return parseInt(sel, 10) || Math.max(1, Math.round(getEffectiveFps()));
   }
 
   let syncCanvas = null;
   let syncCtx = null;
-  function syncSnapshotSize() {
-    if (!canvas.width || !canvas.height) return;
-    if (!syncCanvas) {
-      syncCanvas = document.createElement("canvas");
-      syncCtx = syncCanvas.getContext("2d");
-    }
-    syncCanvas.width = canvas.width;
-    syncCanvas.height = canvas.height;
-  }
+  
 
   const chunks = [];
   let recorder = null;
@@ -878,11 +1173,27 @@ if ('serviceWorker' in navigator) {
     if (!snapshots.length) { toast("No hay fotos para exportar.", "info"); return; }
     if (exporting) return;
     exporting = true;
+    forcedPlay = false;
     const fpsOut = resolveExportFps();
 
     if (exportBtn) exportBtn.disabled = true;
 
-    if (!syncCanvas) syncSnapshotSize();
+    if (!syncCanvas) {
+      syncCanvas = document.createElement("canvas");
+      syncCtx = syncCanvas.getContext("2d");
+    }
+
+    const frames = snapshots.slice();
+    const first = frames[0];
+    if (!first?.width || !first?.height) {
+      toast("Las fotos no tienen dimensiones válidas.", "danger");
+      exporting = false;
+      if (exportBtn) exportBtn.disabled = false;
+      return;
+    }
+
+    syncCanvas.width = first.width;
+    syncCanvas.height = first.height;
 
     const stream = syncCanvas.captureStream?.(fpsOut) || syncCanvas.mozCaptureStream?.(fpsOut);
     if (!stream) { toast("No se pudo crear stream de exportación", "danger"); exporting = false; if (exportBtn) exportBtn.disabled = false; return; }
@@ -958,29 +1269,21 @@ if ('serviceWorker' in navigator) {
 
     const frameDurMs = 1000 / fpsOut;
     const wait = ms => new Promise(res => setTimeout(res, ms));
-    const loadImage = blob => new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(blob);
-      const img = new Image();
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-        resolve(img);
-      };
-      img.onerror = () => {
-        URL.revokeObjectURL(url);
-        reject(new Error("No se pudo cargar la foto"));
-      };
-      img.src = url;
-    });
-
     try {
-      for (let i = 0; i < snapshots.length; i++) {
-        const img = await loadImage(snapshots[i]);
+      for (let i = 0; i < frames.length; i++) {
+        const snap = frames[i];
+        const drawable = await getSnapshotDrawable(snap);
+        if (!drawable) continue;
         ctx.save();
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const scale = Math.min(canvas.width / snap.width, canvas.height / snap.height);
+        const drawW = snap.width * scale;
+        const drawH = snap.height * scale;
+        const dx = (canvas.width - drawW) / 2;
+        const dy = (canvas.height - drawH) / 2;
+        ctx.drawImage(drawable, dx, dy, drawW, drawH);
         ctx.restore();
-        if (typeof img.close === "function") img.close();
         await wait(frameDurMs);
       }
     } catch (err) {
